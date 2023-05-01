@@ -12,8 +12,11 @@ from torchvision.utils import save_image
 from dataset import DisasterDataset
 from model.cGAN import Discriminator, GeneratorUNet, weights_init_normal
 
-cuda = True if torch.cuda.is_available() else False
+import scipy
+import torchvision.models as models
 
+
+cuda = True if torch.cuda.is_available() else False
 img_height, img_width = 1024, 1024
 lr = 0.0002
 b1 = 0.5
@@ -159,6 +162,44 @@ def main():
             # Save model checkpoints
             torch.save(generator.state_dict(), "saved_models/generator_%d.pth" % e)
             torch.save(discriminator.state_dict(), "saved_models/discriminator_%d.pth" % e)
+
+## This is for FID
+inception_model = models.inception_v3(pretrained=True)
+inception_model.eval()
+with torch.no_grad():
+    imgs = next(iter(val_dataloader))
+    real_A = Variable(imgs[0].type(Tensor))
+    disaster = Variable(LongTensor(np.random.randint(0, 6, 2)))
+    generated_images = generator(real_A, disaster)
+
+
+def get_feature_statistics(images, model):
+    features = []
+    for i in range(images.shape[0]):
+        img = torch.FloatTensor(images[i].type(Tensor))
+        feat = model(img.unsqueeze(0))[0].view(-1).cpu().detach().numpy()
+        features.append(feat)
+    features = np.array(features)
+    mu = np.mean(features, axis=0)
+    cov = np.cov(features, rowvar=False)
+    return mu, cov
+
+
+real_images_mu, real_images_cov = get_feature_statistics(imgs[0], inception_model)
+generated_images_mu, generated_images_cov = get_feature_statistics(generated_images, inception_model)
+
+
+def calculate_fid_score(mu1, cov1, mu2, cov2):
+    diff = mu1 - mu2
+    covsqrt, _ = scipy.linalg.sqrtm(np.dot(cov1, cov2), disp=False)
+    if np.iscomplexobj(covsqrt):
+        covsqrt = covsqrt.real
+    fid_score = diff.dot(diff) + np.trace(cov1 + cov2 - 2 * covsqrt)
+    return fid_score
+
+
+fid_score = calculate_fid_score(real_images_mu, real_images_cov, generated_images_mu, generated_images_cov)
+print(fid_score)
 
 if __name__ == "__main__":
     main()
