@@ -15,6 +15,10 @@ def weights_init_normal(m):
 
 
 class UNetDown(nn.Module):
+    """
+    Downsample step
+    """
+
     def __init__(self, in_size, out_size, normalize=True, dropout=0.0):
         super(UNetDown, self).__init__()
         layers = [nn.Conv2d(in_size, out_size, 4, 2, 1, bias=False)]
@@ -30,6 +34,10 @@ class UNetDown(nn.Module):
 
 
 class UNetUp(nn.Module):
+    """
+    Upsample step
+    """
+
     def __init__(self, in_size, out_size, dropout=0.0):
         super(UNetUp, self).__init__()
         layers = [
@@ -53,7 +61,10 @@ class GeneratorUNet(nn.Module):
     def __init__(self, in_channels=3, out_channels=3):
         super(GeneratorUNet, self).__init__()
 
-        self.label_embedding = nn.Embedding(3, 1024 * 1024)
+        # label embedding
+        self.label_embedding = nn.Embedding(6, 1024 * 1024)
+
+        # Unet
         self.down1 = UNetDown(in_channels + 1, 64, normalize=False)
         self.down2 = UNetDown(64, 128)
         self.down3 = UNetDown(128, 256)
@@ -79,8 +90,10 @@ class GeneratorUNet(nn.Module):
         )
 
     def forward(self, x, label):
+        # label embedding
         label_embd = self.label_embedding(label).reshape(-1, 1, 1024, 1024)
         x = torch.cat([x, label_embd], dim=1)
+
         # U-Net generator with skip connections from encoder to decoder
         d1 = self.down1(x)
         d2 = self.down2(d1)
@@ -104,7 +117,9 @@ class GeneratorUNet(nn.Module):
 class Discriminator(nn.Module):
     def __init__(self, in_channels=3):
         super(Discriminator, self).__init__()
-        self.label_embedding = nn.Embedding(3, 1024 * 1024)
+
+        # label embedding
+        self.label_embedding = nn.Embedding(6, 1024 * 1024)
 
         def discriminator_block(in_filters, out_filters, normalization=True):
             """Returns downsampling layers of each discriminator block"""
@@ -124,6 +139,7 @@ class Discriminator(nn.Module):
         )
 
     def forward(self, img_A, img_B, label):
+
         # Concatenate image and condition image by channels to produce input
         label_embd = self.label_embedding(label).reshape(-1, 1, 1024, 1024)
         x = torch.cat([img_A, label_embd], dim=1)
